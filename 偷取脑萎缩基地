@@ -1,0 +1,333 @@
+--源码来自司空，与元宝秘书制作。执行即可，世界无敌。第一。
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local PPS = game:GetService("ProximityPromptService")
+local WS = workspace
+local lp = Players.LocalPlayer
+local pg = lp:WaitForChild("PlayerGui")
+local char = lp.Character or lp.CharacterAdded:Wait()
+local hrp = char:WaitForChild("HumanoidRootPart")
+local myName = lp.DisplayName or lp.Name
+
+local XION = {
+    Bright = Color3.fromRGB(74, 222, 128),
+    Light = Color3.fromRGB(144, 238, 144),
+    Main = Color3.fromRGB(27, 155, 27),
+    Mid = Color3.fromRGB(10, 92, 10),
+    DarkBg = Color3.fromRGB(5, 20, 10),
+    White = Color3.fromRGB(255, 255, 255),
+    Border = Color3.fromRGB(20, 140, 50),
+}
+
+local rarityWeight = { Secret = 150, Godly = 130, Mythical = 111, Legendary = 83, Rare = 42, Common = 18 }
+
+for _, v in pairs(WS:GetDescendants()) do
+    if v:IsA("ProximityPrompt") then
+        pcall(function() v.HoldDuration = 0 end)
+        pcall(function() v.MaxActivationDistance = math.huge end)
+        pcall(function() v.RequiresLineOfSight = false end)
+    end
+end
+WS.DescendantAdded:Connect(function(v)
+    if v:IsA("ProximityPrompt") then
+        pcall(function() v.HoldDuration = 0 end)
+        pcall(function() v.MaxActivationDistance = math.huge end)
+        pcall(function() v.RequiresLineOfSight = false end)
+    end
+end)
+
+local autoConn = nil
+local function startAutoFire()
+    if autoConn then return end
+    autoConn = PPS.PromptShown:Connect(function(prompt, pl)
+        if pl == lp then
+            task.wait(0.03)
+            pcall(function() fireproximityprompt(prompt, 1, true) end)
+        end
+    end)
+end
+local function stopAutoFire()
+    if autoConn then autoConn:Disconnect() autoConn = nil end
+end
+
+local function scanAll()
+    local bases = WS:FindFirstChild("Bases")
+    if not bases then return {} end
+    local res = {}
+    for _, base in pairs(bases:GetChildren()) do
+        local slots = base:FindFirstChild("Slots")
+        if slots then
+            for _, slot in pairs(slots:GetChildren()) do
+                local sp = slot:FindFirstChild("Spawn")
+                if sp then
+                    local item = sp:FindFirstChild("SpawnedItem")
+                    if item then
+                        local part = item:FindFirstChild("part") or item:FindFirstChildWhichIsA("BasePart")
+                        local pr = item:FindFirstChildWhichIsA("ProximityPrompt", true)
+                        if part and pr then
+                            local w = rarityWeight[pr.ObjectText] or 5
+                            local nm = (pr.ActionText or ""):gsub("Steal ", "")
+                            table.insert(res, { item = item, part = part, prompt = pr, name = nm, weight = w, rarity = pr.ObjectText or "?" })
+                        end
+                    end
+                end
+            end
+        end
+    end
+    table.sort(res, function(a, b) return a.weight > b.weight end)
+    return res
+end
+
+local function itemStillThere(it)
+    return it and it.Parent and it:IsDescendantOf(WS:FindFirstChild("Bases"))
+end
+
+local collecting = false
+local autoOn = false
+local autoHome = true
+local homePos = _G.XION_HomePos
+
+local old = pg:FindFirstChild("XION_Mini")
+if old then old:Destroy() end
+
+local sg = Instance.new("ScreenGui", pg)
+sg.Name = "XION_Mini"
+sg.ResetOnSpawn = false
+sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+local main = Instance.new("Frame", sg)
+main.Size = UDim2.new(0, 240, 0, 274)
+main.Position = UDim2.new(1, -250, 1, -284)
+main.BackgroundTransparency = 0.55
+main.BackgroundColor3 = XION.DarkBg
+main.BorderSizePixel = 0
+main.Active = true
+main.Draggable = true
+main.ClipsDescendants = true
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 10)
+
+local border = Instance.new("Frame", main)
+border.Size = UDim2.new(1, 4, 1, 4)
+border.Position = UDim2.new(0, -2, 0, -2)
+border.BackgroundTransparency = 1
+local borderGrad = Instance.new("UIGradient", border)
+borderGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 43, 0)),
+    ColorSequenceKeypoint.new(0.33, XION.Main),
+    ColorSequenceKeypoint.new(0.66, XION.Bright),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 43, 0)),
+})
+borderGrad.Rotation = 45
+local borderStroke = Instance.new("UIStroke", border)
+borderStroke.Thickness = 2
+borderStroke.Color = XION.Main
+borderStroke.Transparency = 0.4
+
+local headerBtn = Instance.new("TextButton", main)
+headerBtn.Size = UDim2.new(1, 0, 0, 30)
+headerBtn.BackgroundTransparency = 1
+headerBtn.Text = ""
+
+local title = Instance.new("TextLabel", main)
+title.Size = UDim2.new(0.78, 0, 0, 30)
+title.BackgroundTransparency = 1
+title.TextColor3 = XION.Bright
+title.TextSize = 13
+title.Font = Enum.Font.GothamBold
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Text = "XION  " .. myName
+
+local arrow = Instance.new("TextLabel", main)
+arrow.Size = UDim2.new(0, 16, 0, 30)
+arrow.Position = UDim2.new(0.88, 0, 0, 0)
+arrow.BackgroundTransparency = 1
+arrow.TextColor3 = XION.Light
+arrow.TextSize = 12
+arrow.Font = Enum.Font.Gotham
+arrow.Text = "v"
+
+local content = Instance.new("Frame", main)
+content.Size = UDim2.new(0.94, 0, 0, 236)
+content.Position = UDim2.new(0.03, 0, 0, 34)
+content.BackgroundTransparency = 1
+content.ClipsDescendants = true
+
+local expanded = true
+local collapsedHeight = 32
+local expandedHeight = 272
+
+headerBtn.MouseButton1Click:Connect(function()
+    expanded = not expanded
+    local target = expanded and expandedHeight or collapsedHeight
+    arrow.Text = expanded and "v" or ">"
+    TweenService:Create(main, TweenInfo.new(0.2, Enum.EasingStyle.Quad), { Size = UDim2.new(0, 240, 0, target) }):Play()
+    task.wait(0.06)
+    content.Visible = expanded
+end)
+
+local layout = Instance.new("UIListLayout", content)
+layout.Padding = UDim.new(0, 4)
+layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+local infoText = Instance.new("TextLabel", content)
+infoText.Size = UDim2.new(0.95, 0, 0, 20)
+infoText.BackgroundTransparency = 1
+infoText.TextColor3 = XION.Light
+infoText.TextSize = 9
+infoText.Font = Enum.Font.Gotham
+infoText.TextWrapped = true
+infoText.Text = "加载中..."
+
+local function makeBtn(text, cb)
+    local b = Instance.new("TextButton", content)
+    b.Size = UDim2.new(0.92, 0, 0, 28)
+    b.Text = text
+    b.BackgroundColor3 = XION.Mid
+    b.BackgroundTransparency = 0.4
+    b.TextColor3 = XION.White
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 11
+    b.BorderSizePixel = 0
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 7)
+    local s = Instance.new("UIStroke", b)
+    s.Color = XION.Main
+    s.Thickness = 1
+    s.Transparency = 0.6
+    b.MouseButton1Click:Connect(cb)
+end
+
+local function makeToggle(text, default, cb)
+    local t = Instance.new("TextButton", content)
+    t.Size = UDim2.new(0.92, 0, 0, 28)
+    t.Text = ""
+    t.BackgroundTransparency = 1
+
+    local lbl = Instance.new("TextLabel", t)
+    lbl.Size = UDim2.new(0.7, 0, 1, 0)
+    lbl.Position = UDim2.new(0.06, 0, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.TextColor3 = XION.White
+    lbl.TextSize = 11
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Text = text
+
+    local dot = Instance.new("Frame", t)
+    dot.Size = UDim2.new(0, 14, 0, 14)
+    dot.Position = UDim2.new(0.85, 0, 0, 7)
+    Instance.new("UICorner", dot).CornerRadius = UDim.new(0, 7)
+
+    local state = default
+    local function refresh()
+        dot.BackgroundColor3 = state and XION.Bright or XION.Border
+    end
+    refresh()
+
+    t.MouseButton1Click:Connect(function()
+        state = not state
+        refresh()
+        cb(state)
+    end)
+end
+
+makeBtn("传送最稀有", function()
+    local all = scanAll()
+    if #all > 0 then
+        hrp.CFrame = all[1].part.CFrame + Vector3.new(0, 3, 0)
+        infoText.Text = "已传送: " .. all[1].name .. " [" .. all[1].rarity .. "]"
+    else
+        infoText.Text = "没有目标"
+    end
+end)
+
+makeToggle("秒互动+自动收集", false, function(state)
+    autoOn = state
+    if state then
+        startAutoFire()
+        collecting = true
+        infoText.Text = "自动收集中..."
+        task.spawn(function()
+            while collecting do
+                local ok, all = pcall(scanAll)
+                if not ok or #all == 0 then
+                    task.wait(0.6)
+                else
+                    local t = all[1]
+                    hrp.CFrame = t.part.CFrame + Vector3.new(0, 3, 0)
+                    task.wait(0.1)
+                    pcall(function() fireproximityprompt(t.prompt) end)
+                    task.wait(0.5)
+                    if autoHome and homePos then
+                        hrp.CFrame = CFrame.new(homePos + Vector3.new(0, 5, 0))
+                    end
+                    if itemStillThere(t.item) then
+                        infoText.Text = "未消失,已回家换下一个"
+                    else
+                        infoText.Text = "已拿起: " .. t.name
+                    end
+                    task.wait(0.3)
+                end
+            end
+        end)
+    else
+        collecting = false
+        stopAutoFire()
+        infoText.Text = "已停止"
+    end
+end)
+
+makeToggle("拿起自动回家", true, function(state)
+    autoHome = state
+end)
+
+makeBtn("记录家位置", function()
+    homePos = hrp.Position
+    _G.XION_HomePos = homePos
+    infoText.Text = "家已记录"
+end)
+
+makeBtn("传送回家", function()
+    if homePos then
+        hrp.CFrame = CFrame.new(homePos + Vector3.new(0, 5, 0))
+        infoText.Text = "已回家"
+    else
+        infoText.Text = "请先设置家"
+    end
+end)
+
+makeBtn("清除家位置", function()
+    homePos = nil
+    _G.XION_HomePos = nil
+    infoText.Text = "家已清除"
+end)
+
+task.spawn(function()
+    local angle = 45
+    while main and main.Parent do
+        angle = (angle + 0.5) % 360
+        borderGrad.Rotation = angle
+        task.wait(0.03)
+    end
+end)
+
+task.wait(0.3)
+local all = scanAll()
+if #all > 0 then
+    infoText.Text = "最稀有: " .. all[1].name .. " [" .. all[1].rarity .. "]"
+else
+    infoText.Text = "未找到脑腐"
+end
+
+task.spawn(function()
+    while true do
+        task.wait(3)
+        if not autoOn then
+            local a = scanAll()
+            if #a > 0 then
+                infoText.Text = "最稀有: " .. a[1].name .. " [" .. a[1].rarity .. "]"
+            end
+        end
+    end
+end)
+
+print("开启成功。司空和元宝秘书为你保驾护航。")
